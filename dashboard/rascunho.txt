@@ -1,0 +1,82 @@
+select q1.fiui_email as email,
+       locations.loca_name as ubs,
+       bia_cafe1, bia_cafe2, bia_almoco1, bia_almoco2, bia_jantar1, bia_jantar2,
+       ecg_cafe1, ecg_cafe2, ecg_almoco1, ecg_almoco2, ecg_jantar1, ecg_jantar2,
+       libre,
+       diario_alimentar,
+       sono
+from (select fiui_email, ecg_cafe1, ecg_cafe2, ecg_almoco1, ecg_almoco2, ecg_jantar1, ecg_jantar2
+      from (select fiui_email,
+                   max(case when ecg_type = 1 and meal = 'Café da Manhã' then 1 else 0 end) as ecg_cafe1,
+                   max(case when ecg_type = 2 and meal = 'Café da Manhã' then 1 else 0 end) as ecg_cafe2,
+                   max(case when ecg_type = 1 and meal = 'Almoço' then 1 else 0 end) as ecg_almoco1,
+                   max(case when ecg_type = 2 and meal = 'Almoço' then 1 else 0 end) as ecg_almoco2,
+                   max(case when ecg_type = 1 and meal = 'Jantar' then 1 else 0 end) as ecg_jantar1,
+                   max(case when ecg_type = 2 and meal = 'Jantar' then 1 else 0 end) as ecg_jantar2
+            from (select firebase.fiui_email, ecg.ecg_type, meals.meal
+                  from project_1_research.ecg as ecg
+                  join project_1_research.meals as meals on ecg.session_id = meals.time
+                  right join project_1_research.firebase_uids as firebase on ecg.user_id = firebase.fiui_uid and date(ecg.time) = '${date}'
+                  group by firebase.fiui_email, ecg.session_id, ecg.ecg_type, meals.meal) q1
+            group by fiui_email) q) as q1
+
+         join
+
+     (select fiui_email, bia_cafe1, bia_cafe2, bia_almoco1, bia_almoco2, bia_jantar1, bia_jantar2
+      from (select fiui_email,
+                   max(case when bia_type = 1 and meal = 'Café da Manhã' then 1 else 0 end) as bia_cafe1,
+                   max(case when bia_type = 2 and meal = 'Café da Manhã' then 1 else 0 end) as bia_cafe2,
+                   max(case when bia_type = 1 and meal = 'Almoço' then 1 else 0 end) as bia_almoco1,
+                   max(case when bia_type = 2 and meal = 'Almoço' then 1 else 0 end) as bia_almoco2,
+                   max(case when bia_type = 1 and meal = 'Jantar' then 1 else 0 end) as bia_jantar1,
+                   max(case when bia_type = 2 and meal = 'Jantar' then 1 else 0 end) as bia_jantar2
+            from (select firebase.fiui_email, bia_type, meals.meal
+                  from project_1_research.bia as bia
+                  join project_1_research.meals as meals on bia.session_id = meals.time
+                  right join project_1_research.firebase_uids as firebase on bia.user_id = firebase.fiui_uid and date(bia.time) = '${date}'
+                  group by firebase.fiui_email, bia.session_id, bia.bia_type, meals.meal) q1
+            group by fiui_email) q) as q2
+     on q1.fiui_email = q2.fiui_email
+
+         join
+
+     (select firebase.fiui_email,
+             count(task_results) as diario_alimentar
+      from project_1_research.task_results as task_results
+               right join project_1_research.firebase_uids as firebase
+           on
+               task_results.user_id = firebase.fiui_uid
+                   and date(task_results.submitted_at) = '${date}'
+      group by firebase.fiui_email,
+               date(task_results.submitted_at)) q3
+     on q2.fiui_email = q3.fiui_email
+
+         join
+
+     (select firebase.fiui_email,
+             count(libre) as libre
+      from project_1_research.libre as libre
+               right join
+           project_1_research.firebase_uids as firebase
+           on
+               libre.libr_user_id = firebase.fiui_uid
+                   and date(libre.libr_date_time_measure) = '${date}'
+                   and libre.libr_type_measure = 'Automatico'
+      group by firebase.fiui_email,
+               date(libre.libr_date_time_measure)) q4
+     on q4.fiui_email = q3.fiui_email
+         join project_1_research.patients as patients on pati_email = q4.fiui_email
+         join project_1_research.locations as locations on loca_id = patients.pati_location
+         join
+     (select firebase.fiui_email,
+             (case when (count(sleep_sessions)) > 0 then 1 else 0 end) as sono
+      from project_1_research.sleepsessions as sleep_sessions
+               right join
+           project_1_research.firebase_uids as firebase
+           on
+               sleep_sessions.user_id = firebase.fiui_uid
+                   and date(sleep_sessions.end_time) = '${date}'
+      group by firebase.fiui_email,
+               date(sleep_sessions.end_time)) q5
+     on q4.fiui_email = q5.fiui_email
+order by email;
